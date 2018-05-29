@@ -3,13 +3,12 @@ import torch
 import torch.nn as nn
 
 
-
 class NCM_classifier(nn.Module):
 	
 	# Initialize the classifier
 	def __init__(self, features, classes, alpha=0.95):
 		super(NCM_classifier, self).__init__()
-		self.means=Parameter(torch.zeros(classes,features),requires_grad=False)				# Class Means
+		self.means=nn.Parameter(torch.zeros(classes,features),requires_grad=False)				# Class Means
 		self.labels={}				# Class Labels, to convert the order of labels to the actual labels of the dataset
 		self.alpha=alpha			# Mean decay value
 		self.features=features			# Input features
@@ -22,7 +21,7 @@ class NCM_classifier(nn.Module):
 		features_reshaped=x.view(-1,1,self.features).expand(x.shape[0],self.classes,self.features)
 		diff=(features_reshaped-means_reshaped)**2
 
-		return diff.sum(dim=-1)**0.5
+		return -diff.sum(dim=-1)**0.5
 			
 	
 	# Update centers (x=features, y=labels)
@@ -30,33 +29,33 @@ class NCM_classifier(nn.Module):
 		holder = torch.zeros_like(self.means)	# Init mean holders
 		holder.data=self.means.data		# Copy data for easy update
 		for i in torch.unique(y):				# For each label
-			mean=compute_mean(x,y,i)	# Compute mean
+			N,mean=self.compute_mean(x,y,i)	# Compute mean
 
 			# If labels already in the set, just update holder, otherwise add it to the model
-			if mean==0:
+			if N==0:
 				holder.data[i,:]=self.means.data[i,:]
 			else:
 				holder.data[i,:]=mean
 		
 		# Update means
-		update(holder)
+		self.update(holder)
 	
 
 	# Perform the update following the mean decay procedure
 	def update(self,holder):
-		self.means=self.alpha*self.means+(1-self.alpha)*holder
+		self.means.data=self.alpha*self.means.data+(1-self.alpha)*holder
 
 
 
 	# Compute mean by filtering the data of the same label
 	def compute_mean(self,x,y,i):
 		mask=(i==y).view(-1,1).float()
+		mask=mask.cuda()
 		N=mask.sum()
 		if N==0:
-			return 0
+			return N,0
 		else:
-			return (x.data*mask).sum(dim=0)/N
-
+			return N,(x.data*mask).sum(dim=0)/N
 
 
 
