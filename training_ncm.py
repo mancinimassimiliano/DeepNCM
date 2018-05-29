@@ -54,10 +54,10 @@ classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship'
 
 # Model
 print('==> Building model..')
-net = networks.ResNet18()
+net = networks.ResNet18_NCM()
 net = net.to(device)
 if device == 'cuda':
-    net = torch.nn.DataParallel(net)
+    net = net.cuda()
     cudnn.benchmark = True
 
 if args.resume:
@@ -70,7 +70,7 @@ if args.resume:
     start_epoch = checkpoint['epoch']
 
 criterion = nn.CrossEntropyLoss()
-optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=0.9, weight_decay=5e-4)
+optimizer = optim.SGD(filter(lambda p: p.requires_grad, net.parameters()), lr=args.lr, momentum=0.9, weight_decay=5e-4)
 
 # Training
 def train(epoch):
@@ -80,18 +80,21 @@ def train(epoch):
     correct = 0
     total = 0
     for batch_idx, (inputs, targets) in enumerate(trainloader):
-        inputs, targets = inputs.to(device), targets.to(device)
+        inputs= inputs.to(device)
         optimizer.zero_grad()
-        outputs = net(inputs)
-        loss = criterion(outputs, targets)
+        outputs = net.forward(inputs)
+	net.update_means(outputs,targets)
+	prediction=net.predict(outputs)
+	targets=targets.to(device)
+        loss = criterion(prediction, targets)
         loss.backward()
         optimizer.step()
 
         train_loss += loss.item()
-        _, predicted = outputs.max(1)
+        _, predicted = prediction.max(1)
         total += targets.size(0)
         correct += predicted.eq(targets).sum().item()
-	if batch_idx%500==0:
+	if batch_idx%10==0:
         	progress_bar(batch_idx, len(trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
             % (train_loss/(batch_idx+1), 100.*correct/total, correct, total))
     return (train_loss/(batch_idx+1)), 100.*correct/total
@@ -105,14 +108,15 @@ def test(epoch):
     with torch.no_grad():
         for batch_idx, (inputs, targets) in enumerate(testloader):
             inputs, targets = inputs.to(device), targets.to(device)
-            outputs = net(inputs)
+            outputs = net.forward(inputs)
+	    outputs=net.predict(outputs)
             loss = criterion(outputs, targets)
 
             test_loss += loss.item()
             _, predicted = outputs.max(1)
             total += targets.size(0)
             correct += predicted.eq(targets).sum().item()
-	    if batch_idx%100==0:
+	    if batch_idx%10==0:
 		progress_bar(batch_idx, len(testloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
                 % (test_loss/(batch_idx+1), 100.*correct/total, correct, total))
 
@@ -121,12 +125,15 @@ def test(epoch):
     return acc
 
 
-def loop(epochs=200,dataset_name='softmax'):
+def loop(epochs=200,dataset_name='ncm'):
 	vis.env =dataset_name
 	iters=[]
 	losses_training=[]
 	accuracy_training=[]
 	accuracies_test=[]
+	for name,param in net.named_parameters():
+		if param.requires_grad:
+			print(name)
 	for epoch in range(start_epoch, start_epoch+epochs):
 
 		# Perform 1 training epoch

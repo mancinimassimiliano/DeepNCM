@@ -97,8 +97,108 @@ class ResNet(nn.Module):
         return out
 
 
+
+
+class NCM_classifier(nn.Module):
+	
+	# Initialize the classifier
+	def __init__(self, features, classes, alpha=0.95):
+		super(NCM_classifier, self).__init__()
+		self.means=nn.Parameter(torch.zeros(classes,features),requires_grad=False)				# Class Means
+		self.labels={}				# Class Labels, to convert the order of labels to the actual labels of the dataset
+		self.alpha=alpha			# Mean decay value
+		self.features=features			# Input features
+		self.classes=classes
+		
+
+	# Forward pass (x=features)
+	def forward(self,x):
+		means_reshaped=self.means.view(1,self.classes,self.features).expand(x.shape[0],self.classes,self.features)
+		features_reshaped=x.view(-1,1,self.features).expand(x.shape[0],self.classes,self.features)
+		diff=(features_reshaped-means_reshaped)**2
+
+		return -diff.sum(dim=-1)**0.5
+			
+	
+	# Update centers (x=features, y=labels)
+	def update_means(self,x,y):
+		holder = torch.zeros_like(self.means)	# Init mean holders
+		holder.data=self.means.data		# Copy data for easy update
+		for i in torch.unique(y):				# For each label
+			N,mean=self.compute_mean(x,y,i)	# Compute mean
+
+			# If labels already in the set, just update holder, otherwise add it to the model
+			if N==0:
+				holder.data[i,:]=self.means.data[i,:]
+			else:
+				holder.data[i,:]=mean
+		
+		# Update means
+		self.update(holder)
+	
+
+	# Perform the update following the mean decay procedure
+	def update(self,holder):
+		self.means.data=self.alpha*self.means.data+(1-self.alpha)*holder
+
+
+
+	# Compute mean by filtering the data of the same label
+	def compute_mean(self,x,y,i):
+		mask=(i==y).view(-1,1).float()
+		mask=mask.cuda()
+		N=mask.sum()
+		if N==0:
+			return N,0
+		else:
+			return N,(x.data*mask).sum(dim=0)/N
+
+class ResNet_NCM(nn.Module):
+    def __init__(self, block, num_blocks, num_classes=10):
+        super(ResNet_NCM, self).__init__()
+        self.in_planes = 64
+
+        self.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(64)
+        self.layer1 = self._make_layer(block, 64, num_blocks[0], stride=1)
+        self.layer2 = self._make_layer(block, 128, num_blocks[1], stride=2)
+        self.layer3 = self._make_layer(block, 256, num_blocks[2], stride=2)
+        self.layer4 = self._make_layer(block, 512, num_blocks[3], stride=2)
+        self.linear = NCM_classifier(512*block.expansion, num_classes)
+
+    def _make_layer(self, block, planes, num_blocks, stride):
+        strides = [stride] + [1]*(num_blocks-1)
+        layers = []
+        for stride in strides:
+            layers.append(block(self.in_planes, planes, stride))
+            self.in_planes = planes * block.expansion
+        return nn.Sequential(*layers)
+
+    def forward(self, x):
+        out = F.relu(self.bn1(self.conv1(x)))
+        out = self.layer1(out)
+        out = self.layer2(out)
+        out = self.layer3(out)
+        out = self.layer4(out)
+        out = F.avg_pool2d(out, 4)
+        out = out.view(out.size(0), -1)
+        #out = self.linear(out)
+        return out
+
+    def update_means(self, x,y):
+        out = self.linear.update_means(x,y)
+        return out
+
+    def predict(self, x):
+        out = self.linear(x)
+        return out
+
+
 def ResNet18():
     return ResNet(BasicBlock, [2,2,2,2])
+
+def ResNet18_NCM():
+    return ResNet_NCM(BasicBlock, [2,2,2,2])
 
 def ResNet34():
     return ResNet(BasicBlock, [3,4,6,3])
