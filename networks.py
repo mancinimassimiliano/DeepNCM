@@ -102,9 +102,10 @@ class ResNet(nn.Module):
 class NCM_classifier(nn.Module):
 	
 	# Initialize the classifier
-	def __init__(self, features, classes, alpha=0.95):
+	def __init__(self, features, classes, alpha=0.9):
 		super(NCM_classifier, self).__init__()
 		self.means=nn.Parameter(torch.zeros(classes,features),requires_grad=False)				# Class Means
+		self.running_means=nn.Parameter(torch.zeros(classes,features),requires_grad=False)
 		self.labels={}				# Class Labels, to convert the order of labels to the actual labels of the dataset
 		self.alpha=alpha			# Mean decay value
 		self.features=features			# Input features
@@ -116,30 +117,29 @@ class NCM_classifier(nn.Module):
 		means_reshaped=self.means.view(1,self.classes,self.features).expand(x.shape[0],self.classes,self.features)
 		features_reshaped=x.view(-1,1,self.features).expand(x.shape[0],self.classes,self.features)
 		diff=(features_reshaped-means_reshaped)**2
+		cumulative_diff=diff.sum(dim=-1)
 
-		return -diff.sum(dim=-1)**0.5
+		return -cumulative_diff
 			
 	
 	# Update centers (x=features, y=labels)
 	def update_means(self,x,y):
-		holder = torch.zeros_like(self.means)	# Init mean holders
-		holder.data=self.means.data		# Copy data for easy update
 		for i in torch.unique(y):				# For each label
 			N,mean=self.compute_mean(x,y,i)	# Compute mean
 
 			# If labels already in the set, just update holder, otherwise add it to the model
 			if N==0:
-				holder.data[i,:]=self.means.data[i,:]
+				self.running_means.data[i,:]=self.means.data[i,:]
 			else:
-				holder.data[i,:]=mean
+				self.running_means.data[i,:]=mean
 		
 		# Update means
-		self.update(holder)
+		self.update()
 	
 
 	# Perform the update following the mean decay procedure
-	def update(self,holder):
-		self.means.data=self.alpha*self.means.data+(1-self.alpha)*holder
+	def update(self):
+		self.means.data=self.alpha*self.means.data+(1-self.alpha)*self.running_means
 
 
 
@@ -186,8 +186,7 @@ class ResNet_NCM(nn.Module):
         return out
 
     def update_means(self, x,y):
-        out = self.linear.update_means(x,y)
-        return out
+        self.linear.update_means(x,y)
 
     def predict(self, x):
         out = self.linear(x)
@@ -200,8 +199,11 @@ def ResNet18():
 def ResNet18_NCM():
     return ResNet_NCM(BasicBlock, [2,2,2,2])
 
-def ResNet34():
-    return ResNet(BasicBlock, [3,4,6,3])
+def ResNet34_NCM(classes=10):
+    return ResNet_NCM(BasicBlock, [3,4,6,3],num_classes=classes)
+
+def ResNet34(classes=10):
+    return ResNet(BasicBlock, [3,4,6,3],num_classes=classes)
 
 def ResNet50():
     return ResNet(Bottleneck, [3,4,6,3])
