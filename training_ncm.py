@@ -94,17 +94,18 @@ def train(epoch,optimizer):
         inputs= inputs.to(device)
         optimizer.zero_grad()
         outputs = net.forward(inputs)
-	prediction=net.predict(outputs)
 	net.update_means(outputs,targets)
-	targets=targets.to(device)
-        loss = criterion(prediction, targets)
+	prediction=net.predict(outputs)
+	targets_dev=targets.to(device)
+        loss = criterion(prediction, targets_dev)
         loss.backward()
+	
         optimizer.step()
 
         train_loss += loss.item()
         _, predicted = prediction.max(1)
         total += targets.size(0)
-        correct += predicted.eq(targets).sum().item()
+        correct += predicted.eq(targets_dev).sum().item()
 	if batch_idx%500==0:
         	progress_bar(batch_idx, len(trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
             % (train_loss/(batch_idx+1), 100.*correct/total, correct, total))
@@ -138,7 +139,7 @@ def test(epoch):
 
 def loop(epochs=200,dataset_name='cifar'+str(args.dataset)):
 	vis.env =dataset_name
-	model_name='DEEP NCM'
+	model_name='DEEP NCM before'
 	iters=[]
 	losses_training=[]
 	accuracy_training=[]

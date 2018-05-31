@@ -106,7 +106,6 @@ class NCM_classifier(nn.Module):
 		super(NCM_classifier, self).__init__()
 		self.means=nn.Parameter(torch.zeros(classes,features),requires_grad=False)				# Class Means
 		self.running_means=nn.Parameter(torch.zeros(classes,features),requires_grad=False)
-		self.labels={}				# Class Labels, to convert the order of labels to the actual labels of the dataset
 		self.alpha=alpha			# Mean decay value
 		self.features=features			# Input features
 		self.classes=classes
@@ -152,6 +151,8 @@ class NCM_classifier(nn.Module):
 			return N,0
 		else:
 			return N,(x.data*mask).sum(dim=0)/N
+
+
 
 class ResNet_NCM(nn.Module):
     def __init__(self, block, num_blocks, num_classes=10):
