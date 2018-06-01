@@ -135,7 +135,7 @@ def test(epoch):
 
 
 def loop(epochs=200,dataset_name='cifar'+str(args.dataset)):
-	vis.env =dataset_name
+	vis.env ='softmax ' + dataset_name
 	model_name='SOFTMAX'
 	iters=[]
 	losses_training=[]
@@ -168,28 +168,28 @@ def loop(epochs=200,dataset_name='cifar'+str(args.dataset)):
 				X=np.array(iters),
 				Y=np.array(losses_training),
 		 		opts={
-		        		'title': ' Training Loss ' +model_name,
+		        		'title': ' Training Loss ' ,
 		        		'xlabel': 'epochs',
 		        		'ylabel': 'loss'},
-		    			name='Training Loss '+model_name,
+		    			name='Training Loss ',
 		    		win=0)
 		vis.line(
 		    		X=np.array(iters),
 		    		Y=np.array(accuracy_training),
 		    		opts={
-		        		'title': ' Training Accuracy '+model_name,
+		        		'title': ' Training Accuracy ',
 		        		'xlabel': 'epochs',
 		        		'ylabel': 'accuracy'},
-		    			name='Training Accuracy '+model_name,
+		    			name='Training Accuracy ',
 		    		win=1)
 		vis.line(
 		    		X=np.array(iters),
 		    		Y=np.array(accuracies_test),
 		    		opts={
-		        		'title': ' Accuracy '+model_name,
+		        		'title': ' Accuracy ',
 		        		'xlabel': 'epochs',
 		        		'ylabel': 'accuracy'},
-		    			name='Validation Accuracy '+model_name,
+		    			name='Validation Accuracy ',
 		    		win=2)
 
 

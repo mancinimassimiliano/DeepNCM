@@ -67,7 +67,7 @@ classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship'
 
 # Model
 print('==> Building model..')
-net = networks.ResNet34_NCM(classes=args.dataset)
+net = networks.ResNet34_iNCM()
 net = net.to(device)
 if device == 'cuda':
     cudnn.benchmark = True
@@ -95,14 +95,15 @@ def train(epoch,optimizer):
     for batch_idx, (inputs, targets) in enumerate(trainloader):
         inputs= inputs.to(device)
         optimizer.zero_grad()
+	net.prepare(targets)
         outputs = net.forward(inputs)
 	if args.before==0:
 		net.update_means(outputs,targets)
 	prediction=net.predict(outputs)
 	if args.before==1:   
                 net.update_means(outputs,targets)
-	targets_dev=targets.to(device)
-        loss = criterion(prediction, targets_dev)
+	targets_converted=net.linear.convert_labels(targets).to(outputs.device)
+        loss = criterion(prediction, targets_converted)
 	if args.before==2:   
                 net.update_means(outputs,targets)
         loss.backward()
@@ -112,7 +113,7 @@ def train(epoch,optimizer):
         train_loss += loss.item()
         _, predicted = prediction.max(1)
         total += targets.size(0)
-        correct += predicted.eq(targets_dev).sum().item()
+        correct += predicted.eq(targets_converted).sum().item()
 	if batch_idx%500==0:
         	progress_bar(batch_idx, len(trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
             % (train_loss/(batch_idx+1), 100.*correct/total, correct, total))
@@ -126,15 +127,16 @@ def test(epoch):
     total = 0
     with torch.no_grad():
         for batch_idx, (inputs, targets) in enumerate(testloader):
-            inputs, targets = inputs.to(device), targets.to(device)
+            inputs= inputs.to(device)
             outputs = net.forward(inputs)
 	    outputs=net.predict(outputs)
-            loss = criterion(outputs, targets)
-
+	    targets_converted=net.linear.convert_labels(targets).to(outputs.device)
+            loss = criterion(outputs, targets_converted)
+	
             test_loss += loss.item()
             _, predicted = outputs.max(1)
             total += targets.size(0)
-            correct += predicted.eq(targets).sum().item()
+            correct += predicted.eq(targets_converted).sum().item()
 	    if batch_idx%100==0:
 		progress_bar(batch_idx, len(testloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
                 % (test_loss/(batch_idx+1), 100.*correct/total, correct, total))
@@ -145,8 +147,8 @@ def test(epoch):
 
 
 def loop(epochs=200,dataset_name='cifar'+str(args.dataset)):
-	vis.env ='deep ncm ' + dataset_name+' '+str(args.before)
-	model_name='DEEP NCM before: '+str(args.before)
+	vis.env ='incremental deep ncm' + dataset_name+str(args.before)
+	model_name='DEEP NCM incremental: '+str(args.before)
 	iters=[]
 	losses_training=[]
 	accuracy_training=[]
