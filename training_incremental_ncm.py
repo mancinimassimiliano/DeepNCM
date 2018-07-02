@@ -117,7 +117,9 @@ def train(epoch,optimizer):
         _, predicted = prediction.max(1)
         total += targets.size(0)
         correct += predicted.eq(targets_converted).sum().item()
-	if batch_idx%500==0:
+	if batch_idx%200==0:
+		print()
+		print('TRAINING')
         	progress_bar(batch_idx, len(trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
             % (train_loss/(batch_idx+1), 100.*correct/total, correct, total))
     return (train_loss/(batch_idx+1)), 100.*correct/total
@@ -140,6 +142,8 @@ def test(epoch):
             total += targets.size(0)
             correct += predicted.eq(targets_converted).sum().item()
 	    if batch_idx%100==0:
+		print()
+		print('TEST')
 		progress_bar(batch_idx, len(testloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
                 % (test_loss/(batch_idx+1), 100.*correct/total, correct, total))
 
