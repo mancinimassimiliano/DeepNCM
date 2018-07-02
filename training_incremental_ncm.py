@@ -25,6 +25,7 @@ LR=0.1
 
 parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training')
 parser.add_argument('--resume', '-r', action='store_true', help='resume from checkpoint')
+parser.add_argument('--no_vis', '-v', action='store_true', help='avoid visualization')
 parser.add_argument('--dataset',  type=int, default=10, help='choose dataset')
 
 args = parser.parse_args()
