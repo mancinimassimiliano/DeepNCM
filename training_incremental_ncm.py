@@ -15,7 +15,6 @@ import networks
 import numpy as np
 import argparse
 
-import visdom
 
 from utils import progress_bar
 
@@ -23,7 +22,6 @@ from utils import progress_bar
 EPOCHS=250
 LR=0.1
 
-vis = visdom.Visdom()
 
 parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training')
 parser.add_argument('--resume', '-r', action='store_true', help='resume from checkpoint')
@@ -106,12 +104,12 @@ def train(epoch,optimizer):
 	# Compute loss
         loss = criterion(prediction, targets_converted)
 
-	# Update means
-	net.update_means(outputs,targets)
-
 	# Backward + update
         loss.backward()
         optimizer.step()
+
+	# Update means
+	net.update_means(outputs,targets)
 
 	# Printing stuff
         train_loss += loss.item()
@@ -150,17 +148,19 @@ def test(epoch):
 
 
 def loop(epochs=200,dataset_name='cifar'+str(args.dataset)):
-	vis.env ='incremental deep ncm' + dataset_name+str(args.before)
-	model_name='DEEP NCM incremental: '+str(args.before)
+	visualize=not args.no_vis
+	if visualize:
+		import visdom
+		vis = visdom.Visdom()
+		vis.env ='incremental deep ncm ' + dataset_name
+	model_name='DEEP NCM'
 	iters=[]
 	losses_training=[]
 	accuracy_training=[]
 	accuracies_test=[]
 	lr=LR
 	optimizer = optim.SGD(filter(lambda p: p.requires_grad, net.parameters()), lr=LR, momentum=0.9, weight_decay=5e-4)
-	#for name,param in net.named_parameters():
-	#	if param.requires_grad:
-	#		print(name)
+
 	for epoch in range(start_epoch, start_epoch+epochs):
 
 		if epoch%50==0 and epoch>50:
@@ -174,41 +174,43 @@ def loop(epochs=200,dataset_name='cifar'+str(args.dataset)):
 		# Validate the model
 		result = test(epoch)
 
-		# Update lists (for visualization purposes)
-		accuracies_test.append(result)
-		accuracy_training.append(acc_epoch)
-		losses_training.append(loss_epoch)
-		iters.append(epoch)
+		if visualize:
+			# Update lists (for visualization purposes)
+			accuracies_test.append(result)
+			accuracy_training.append(acc_epoch)
+			losses_training.append(loss_epoch)
+			iters.append(epoch)
 	
 
-		# Print results
-		vis.line(
-				X=np.array(iters),
-				Y=np.array(losses_training),
-		 		opts={
-		        		'title': ' Training Loss ' ,
-		        		'xlabel': 'epochs',
-		        		'ylabel': 'loss'},
-		    			name='Training Loss ',
-		    		win=10)
-		vis.line(
-		    		X=np.array(iters),
-		    		Y=np.array(accuracy_training),
-		    		opts={
-		        		'title': ' Training Accuracy ',
-		        		'xlabel': 'epochs',
-		        		'ylabel': 'accuracy'},
-		    			name='Training Accuracy ',
-		    		win=11)
-		vis.line(
-		    		X=np.array(iters),
-		    		Y=np.array(accuracies_test),
-		    		opts={
-		        		'title': ' Accuracy ',
-		        		'xlabel': 'epochs',
-		        		'ylabel': 'accuracy'},
-		    			name='Validation Accuracy ',
-		    		win=12)
+			# Print results
+			vis.line(
+					X=np.array(iters),
+					Y=np.array(losses_training),
+			 		opts={
+						'title': ' Training Loss ' ,
+						'xlabel': 'epochs',
+						'ylabel': 'loss'},
+			    			name='Training Loss ',
+			    		win=10)
+			vis.line(
+			    		X=np.array(iters),
+			    		Y=np.array(accuracy_training),
+			    		opts={
+						'title': ' Training Accuracy ',
+						'xlabel': 'epochs',
+						'ylabel': 'accuracy'},
+			    			name='Training Accuracy ',
+			    		win=11)
+			vis.line(
+			    		X=np.array(iters),
+			    		Y=np.array(accuracies_test),
+			    		opts={
+						'title': ' Accuracy ',
+						'xlabel': 'epochs',
+						'ylabel': 'accuracy'},
+			    			name='Validation Accuracy ',
+			    		win=12)
+
 
 
 loop(epochs=EPOCHS)
