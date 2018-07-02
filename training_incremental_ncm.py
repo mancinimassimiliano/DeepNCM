@@ -28,12 +28,10 @@ vis = visdom.Visdom()
 parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training')
 parser.add_argument('--resume', '-r', action='store_true', help='resume from checkpoint')
 parser.add_argument('--dataset',  type=int, default=10, help='choose dataset')
-parser.add_argument('--before',  type=int, default=0, help='update_position')
 
 args = parser.parse_args()
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-best_acc = 0  # best test accuracy
 start_epoch = 0  # start from epoch 0 or last checkpoint epoch
 
 # Data
@@ -78,14 +76,13 @@ if args.resume:
     assert os.path.isdir('checkpoint'), 'Error: no checkpoint directory found!'
     checkpoint = torch.load('./checkpoint/ckpt.t7')
     net.load_state_dict(checkpoint['net'])
-    best_acc = checkpoint['acc']
     start_epoch = checkpoint['epoch']
 
 criterion = nn.CrossEntropyLoss()
 
 
-lr=LR
-# Training
+
+# Training, single epoch
 def train(epoch,optimizer):
     print('\nEpoch: %d' % epoch)
     net.train()
@@ -95,21 +92,28 @@ def train(epoch,optimizer):
     for batch_idx, (inputs, targets) in enumerate(trainloader):
         inputs= inputs.to(device)
         optimizer.zero_grad()
+
+	# Initialize classifier (if novel classes are present)
 	net.prepare(targets)
+
+	# Forward predictionbs
         outputs = net.forward(inputs)
-	if args.before==0:
-		net.update_means(outputs,targets)
 	prediction=net.predict(outputs)
-	if args.before==1:   
-                net.update_means(outputs,targets)
+
+	# Convert labels to match the order seen by the classifier
 	targets_converted=net.linear.convert_labels(targets).to(outputs.device)
+
+	# Compute loss
         loss = criterion(prediction, targets_converted)
-	if args.before==2:   
-                net.update_means(outputs,targets)
+
+	# Update means
+	net.update_means(outputs,targets)
+
+	# Backward + update
         loss.backward()
-	
         optimizer.step()
 
+	# Printing stuff
         train_loss += loss.item()
         _, predicted = prediction.max(1)
         total += targets.size(0)
@@ -120,7 +124,6 @@ def train(epoch,optimizer):
     return (train_loss/(batch_idx+1)), 100.*correct/total
 
 def test(epoch):
-    global best_acc
     net.eval()
     test_loss = 0
     correct = 0

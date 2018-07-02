@@ -28,12 +28,10 @@ vis = visdom.Visdom()
 parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training')
 parser.add_argument('--resume', '-r', action='store_true', help='resume from checkpoint')
 parser.add_argument('--dataset',  type=int, default=10, help='choose dataset')
-parser.add_argument('--before',  type=int, default=0, help='update_position')
 
 args = parser.parse_args()
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-best_acc = 0  # best test accuracy
 start_epoch = 0  # start from epoch 0 or last checkpoint epoch
 
 # Data
@@ -78,14 +76,13 @@ if args.resume:
     assert os.path.isdir('checkpoint'), 'Error: no checkpoint directory found!'
     checkpoint = torch.load('./checkpoint/ckpt.t7')
     net.load_state_dict(checkpoint['net'])
-    best_acc = checkpoint['acc']
     start_epoch = checkpoint['epoch']
 
 criterion = nn.CrossEntropyLoss()
 
 
-lr=LR
-# Training
+
+# Training, single epoch
 def train(epoch,optimizer):
     print('\nEpoch: %d' % epoch)
     net.train()
@@ -94,21 +91,26 @@ def train(epoch,optimizer):
     total = 0
     for batch_idx, (inputs, targets) in enumerate(trainloader):
         inputs= inputs.to(device)
-        optimizer.zero_grad()
-        outputs = net.forward(inputs)
-	if args.before==0:
-		net.update_means(outputs,targets)
-	prediction=net.predict(outputs)
-	if args.before==1:   
-                net.update_means(outputs,targets)
 	targets_dev=targets.to(device)
-        loss = criterion(prediction, targets_dev)
-	if args.before==2:   
-                net.update_means(outputs,targets)
+        optimizer.zero_grad()
+
+	# Produce features
+        outputs = net.forward(inputs)
+
+	# Predict using current class means
+	prediction=net.predict(outputs)
+
+	# Apply loss
+	loss = criterion(prediction, targets_dev)
+
+	# Update class means
+	net.update_means(outputs,targets)
+
+	# Backward + update
         loss.backward()
-	
         optimizer.step()
 
+	# Printing stuff
         train_loss += loss.item()
         _, predicted = prediction.max(1)
         total += targets.size(0)
@@ -118,8 +120,9 @@ def train(epoch,optimizer):
             % (train_loss/(batch_idx+1), 100.*correct/total, correct, total))
     return (train_loss/(batch_idx+1)), 100.*correct/total
 
+
+# Test
 def test(epoch):
-    global best_acc
     net.eval()
     test_loss = 0
     correct = 0
@@ -144,18 +147,18 @@ def test(epoch):
     return acc
 
 
+
+# Full training procedure
 def loop(epochs=200,dataset_name='cifar'+str(args.dataset)):
-	vis.env ='deep ncm ' + dataset_name+' '+str(args.before)
-	model_name='DEEP NCM before: '+str(args.before)
+	vis.env ='deep ncm ' + dataset_name
+	model_name='DEEP NCM'
 	iters=[]
 	losses_training=[]
 	accuracy_training=[]
 	accuracies_test=[]
 	lr=LR
 	optimizer = optim.SGD(filter(lambda p: p.requires_grad, net.parameters()), lr=LR, momentum=0.9, weight_decay=5e-4)
-	#for name,param in net.named_parameters():
-	#	if param.requires_grad:
-	#		print(name)
+
 	for epoch in range(start_epoch, start_epoch+epochs):
 
 		if epoch%50==0 and epoch>50:

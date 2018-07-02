@@ -68,9 +68,11 @@ class incremental_NCM_classifier(nn.Module):
 		if classes==0:
 			self.means=nn.Parameter(torch.Tensor(0),requires_grad=False)				# Class Means
 			self.running_means=nn.Parameter(torch.Tensor(0),requires_grad=False)
+			self.counter=nn.Parameter(torch.Tensor(0),requires_grad=False)
 		else: 
 			self.means=nn.Parameter(torch.zeros(classes,features),requires_grad=False)				# Class Means
 			self.running_means=nn.Parameter(torch.zeros(classes,features),requires_grad=False)
+			self.counter=nn.Parameter(torch.zeros(classes),requires_grad=False)
 			
 		self.classes=classes
 
@@ -103,17 +105,40 @@ class incremental_NCM_classifier(nn.Module):
 			converted=self.labels[index]			
 
 			# If labels already in the set, just update holder, otherwise add it to the model
+			if N>0:
+				self.means.data[converted,:]= 1/(self.counter[converted]+N)*(self.means.data[converted,:]*self.counter[converted]+mean*N)
+				self.counter.data[converted]+=N
+
+
+	# Update centers (x=features, y=labels)
+	def update_means_decay(self,x,y):
+		for i in torch.unique(y):
+			index=int(i)				# For each label
+				# Compute mean
+			N,mean=self.compute_mean(x,y,i)
+
+			if index not in self.labels.keys():
+				self.add_class(index)
+
+			converted=self.labels[index]			
+
+			# If labels already in the set, just update holder, otherwise add it to the model
 			if N==0:
 				self.running_means.data[converted,:]=self.means.data[converted,:]
 			else:
 				self.running_means.data[converted,:]=mean
 		
 		# Update means
-		self.update()
+		self.update_decay()
 	
 
 	# Perform the update following the mean decay procedure
 	def update(self):
+		self.means.data=self.alpha*self.means.data+(1-self.alpha)*self.running_means
+
+
+	# Perform the update following the mean decay procedure
+	def update_decay(self):
 		self.means.data=self.alpha*self.means.data+(1-self.alpha)*self.running_means
 
 
@@ -136,10 +161,12 @@ class incremental_NCM_classifier(nn.Module):
 			out.append(self.labels[int(i)])
 		return torch.LongTensor(out).to(y.device)
 	
+	def convert_single_label(self,y):
+    		return self.labels[y]
 
 
 
-	# Add a classi to the dataset, updating the labels indeces
+	# Add a class to the dataset, updating the labels indeces
 	def add_class(self, index):
 		print('Adding '+str(index)+' as '+str(self.classes))
 
@@ -149,14 +176,19 @@ class incremental_NCM_classifier(nn.Module):
 		if self.classes==1:
 			device=self.means.data.device
 			self.means=nn.Parameter(torch.zeros(self.classes,self.features).to(device),requires_grad=False)			# Class Means
-			self.running_means=nn.Parameter(torch.zeros(self.classes,self.features).to(device),requires_grad=False)	
+			self.running_means=nn.Parameter(torch.zeros(self.classes,self.features).to(device),requires_grad=False)
+			self.counter.data=nn.Parameter(torch.zeros(self.classes).to(device),requires_grad=False)
 		else:
 			device=self.means.data.device
 			self.means.data=torch.cat([self.means.data,torch.zeros(1,self.features).to(device)],dim=0)
 			self.running_means.data=torch.cat([self.running_means.data,torch.zeros(1,self.features).to(device)],dim=0)
+			self.counter.data=torch.cat([self.counter.data,torch.zeros(1).to(device)],dim=0)
 		
 
 
+
+	def reset_counter(self):
+		self.counter.data=self.counter.data*0
 
 	# Add a classi to the dataset, updating the labels indeces
 	def init_from_labels(self, y):
